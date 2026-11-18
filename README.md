@@ -137,14 +137,3 @@ after the reload, and if it shows the other one, the helper swaps sides and reme
 
 **One file.** The whole move picker is inside the bookmark itself, so it runs on the game
 page with nothing to load. The solver page is a single ~60 KB HTML file.
-
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/divider-dark.svg"><img src="docs/divider.svg" alt="" width="100%"></picture></p>
-
-## More Neopets solvers
-
-| Tool | What it does | Links |
-|---|---|:-:|
-| **NeggSweeper Solver** | Marks every negg safe, bad or best bet, with exact odds. | <a href="https://fang89.github.io/Neopets-neggsweeper-solver/">Link&nbsp;to&nbsp;solver</a><br><a href="https://github.com/fang89/Neopets-neggsweeper-solver">Github&nbsp;link</a> |
-| **Sewage Surfer Solver** | Shows where each pipe goes, one move at a time, and when to discard, press Start Flow or restart. | <a href="https://fang89.github.io/Neopets-sewagesurfer-solver/">Link&nbsp;to&nbsp;solver</a><br><a href="https://github.com/fang89/Neopets-sewagesurfer-solver">Github&nbsp;link</a> |
-| **ShapeShifter Solver** | Paste the board, get the answer, see where each piece goes. | <a href="https://fang89.github.io/Neopets-shapeshifter-solver/">Link&nbsp;to&nbsp;solver</a><br><a href="https://github.com/fang89/Neopets-shapeshifter-solver">Github&nbsp;link</a> |
-| **Grand Theft Ummagine Guide** | A drawn map and key-tap route for every level. | <a href="https://github.com/fang89/grand-theft-ummagine-guide">Github&nbsp;link</a> |
