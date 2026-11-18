@@ -582,6 +582,7 @@ if (!/(^|\.)neopets\.com$/.test(location.hostname))
 return say('warn', 'Not the game page', 'Open Cellblock on neopets.com, then click this bookmark there.');
 const frame = document.createElement('iframe');
 frame.id = 'cb-frame';
+frame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads');
 frame.src = /\/games\/cellblock\//.test(location.pathname) ? location.pathname + location.search : LOBBY_URL;
 frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;margin:0;z-index:2147483646;background:#fff';
 document.documentElement.style.overflow = 'hidden';
@@ -590,8 +591,38 @@ $('.o').onclick = () => action && action();
 const doc = () => { try { return frame.contentDocument; } catch (e) { return null; } };
 const nextGame = () => { frame.src = MAIN_URL; };
 let target = null; // {r, c, x, y, td}
+const TOPNAV = /\b(?:window\s*\.\s*)?(?:top|parent)\s*\.\s*(location|document\s*\.\s*location)/g;
+function keepInFrame(d) {
+const w = d.defaultView;
+if (!w || w.__cbKept) return;
+w.__cbKept = true;
+const aim = el => { const t = (el.getAttribute('target') || '').toLowerCase(); if (t && t !== '_self' && t !== '_blank') el.setAttribute('target', '_self'); };
+d.querySelectorAll('form, a, base, area').forEach(aim);
+d.querySelectorAll('*').forEach(el => {
+for (const at of Array.from(el.attributes)) {
+const isHandler = /^on/i.test(at.name), isJsHref = at.name === 'href' && /^\s*javascript:/i.test(at.value);
+if ((isHandler || isJsHref) && TOPNAV.test(at.value)) { TOPNAV.lastIndex = 0; el.setAttribute(at.name, at.value.replace(TOPNAV, 'self.$1')); }
+TOPNAV.lastIndex = 0;
+}
+});
+const inline = Array.from(d.scripts).filter(x => !x.src).map(x => x.text).join('\n');
+for (const k of Object.keys(w)) {
+let f; try { f = w[k]; } catch (e) { continue; }
+if (typeof f !== 'function' || k.startsWith('__cb')) continue;
+let src; try { src = w.Function.prototype.toString.call(f); } catch (e) { continue; }
+if (/\[native code\]/.test(src) || inline.indexOf(src) === -1 || !TOPNAV.test(src)) { TOPNAV.lastIndex = 0; continue; }
+TOPNAV.lastIndex = 0;
+try { w[k] = w.eval('(' + src.replace(TOPNAV, 'self.$1') + ')'); } catch (e) {}
+}
+const FP = w.HTMLFormElement && w.HTMLFormElement.prototype;
+if (FP) { const sub = FP.submit; FP.submit = function () { aim(this); return sub.call(this); }; }
+d.addEventListener('submit', e => e.target && aim(e.target), true);
+d.addEventListener('click', e => { const a = e.target && e.target.closest && e.target.closest('a, area, form'); if (a) aim(a); }, true);
+}
+let rescued = 0;
 function show() {
 const d = doc();
+if (d && d.body) try { keepInFrame(d); } catch (e) {}
 if (!d || !d.body) return say('warn', 'Left the game', 'Go back to Cellblock and click this bookmark again.');
 let pz;
 try { pz = CB.parsePage(d, swap); } catch (e) { return say('bad', 'Could not read the board', String(e && e.message || e)); }
@@ -609,9 +640,16 @@ return say(pz.result === 'won' ? 'ok' : 'bad', head,
 meta, ['Next game of the match →', nextGame]);
 }
 if (pz.state !== 'playing') {
-if (/\/games\/cellblock\//.test(d.location.pathname)) return say('info', 'Waiting for a board', '');
+if (/\/games\/cellblock\//.test(d.location.pathname)) {
+if (rescued < 2) {
+rescued++; setTimeout(() => { if (doc() === d) frame.src = MAIN_URL; }, 300);
+return say('info', 'Loading the board…', '');
+}
+return say('info', 'Waiting for a board', 'Open Cellblock again if the board does not come back.');
+}
 return say('warn', 'Left the game', 'Go back to Cellblock: the helper starts again by itself there.');
 }
+rescued = 0;
 let b = pz.board;
 if (lastPick && b.cells[lastPick[0]] && b.cells[lastPick[0]][lastPick[1]] === CB.THEM) {
 swap = !swap;
