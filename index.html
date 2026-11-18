@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cellblock Solver</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #fff; --ink: #1d1d1f; --mute: #6e6e73; --faint: #8e8e93;
+    --line: rgba(0,0,0,.1); --field: rgba(118,118,128,.12); --accent: #6d28d9; --hi: #a855f7;
+    --ok: #22c55e; --bad: #ef4444;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a14; --card: #17141f; --ink: #f2f0f7; --mute: #a29cb0; --faint: #8f899c;
+      --line: rgba(255,255,255,.1); --field: rgba(150,140,170,.18); --accent: #a78bfa;
+    }
+    :root a.btn { color: #1e1035; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px; }
+  kbd { font: 12px ui-monospace, Menlo, Consolas, monospace; background: var(--field); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+  a:focus-visible, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--hi) 55%, transparent); outline-offset: 2px; }
+
+  /* ------------------------------------------------------------ hero */
+  .hero { background: radial-gradient(120% 140% at 0% 0%, #4c1d95 0%, #1e1b4b 55%, #0f0d1f 100%); color: #fff; padding: 44px 0 40px; }
+  .hero .wrap { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center; }
+  .hero h1 { font-size: 46px; line-height: 1.05; margin: 0; letter-spacing: -.02em; font-weight: 800; }
+  .hero .sub { color: #e9d5ff; font-size: 18px; margin: 10px 0 18px; max-width: 30em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+  .chips span { padding: 6px 13px; border-radius: 999px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28); font-size: 14px; font-weight: 600; }
+  a.gh { display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px 8px 12px; border-radius: 999px;
+    background: #fff; color: #1e1b4b; font-weight: 600; font-size: 14px; text-decoration: none; transition: transform .12s; }
+  a.gh:hover { transform: translateY(-1px); }
+  a.gh svg { width: 17px; height: 17px; fill: currentColor; flex: none; }
+  a.gh .go { opacity: .55; font-weight: 400; }
+
+  /* the demo: a whole game replayed, every move picked live by the bookmark's own code */
+  .demo { background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.16); border-radius: 18px; padding: 14px; width: 404px; max-width: 100%; }
+  .board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; background: #2e2546; padding: 6px; border-radius: 10px;
+           background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px); }
+  .sq { aspect-ratio: 1; border-radius: 5px; background: #4a3f63; position: relative; display: grid; place-items: center; }
+  .sq.st::before { content: ""; width: 74%; height: 74%; border-radius: 50%; animation: drop .25s ease-out both; }
+  .sq.us::before { background: radial-gradient(circle at 35% 30%, #fff9 0 14%, transparent 15%), #3b82f6; box-shadow: inset 0 -3px 0 #1d4ed8; }
+  .sq.them::before { background: radial-gradient(circle at 35% 30%, #fff6 0 14%, transparent 15%), #b91c1c; box-shadow: inset 0 -3px 0 #7f1d1d; }
+  .sq.five::after { content: ""; position: absolute; inset: -2px; border-radius: 7px; box-shadow: 0 0 0 3px #facc15, 0 0 14px 4px rgba(250,204,21,.7); }
+  @keyframes drop { from { transform: scale(1.6); opacity: 0; } }
+  .sq.next { z-index: 1; background: #7e22ce; box-shadow: 0 0 0 2px #fff, 0 0 18px 6px rgba(168,85,247,.9); animation: pulse .7s ease-in-out infinite alternate; }
+  .sq.next::after { content: "Play here"; position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+    background: #9333ea; color: #fff; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 7px; white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(0,0,0,.35); animation: bob .6s ease-in-out infinite alternate; }
+  .sq.next.low::after { bottom: auto; top: calc(100% + 7px); }
+  @keyframes pulse { to { box-shadow: 0 0 0 2px #fff, 0 0 26px 10px rgba(168,85,247,.9); } }
+  @keyframes bob { to { transform: translate(-50%, -4px); } }
+  .why { min-height: 44px; margin-top: 10px; font-size: 14px; font-weight: 600; color: #f5f3ff; display: flex; gap: 8px; align-items: flex-start; }
+  .why .tag { flex: none; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border-radius: 6px; background: #9333ea; margin-top: 1px; }
+  .why .tag.book { background: #0ea5e9; } .why .tag.win { background: #ca8a04; } .why .tag.def { background: #dc2626; }
+  .demo-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 12.5px; color: #c4b5fd; }
+  .demo-foot .lg { display: flex; gap: 12px; }
+  .demo-foot .lg i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .demo-foot button { font: inherit; font-weight: 700; color: #1e1b4b; background: #ede9fe; border: 0; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+
+  /* ------------------------------------------------------------ set-up */
+  .setup { padding: 40px 0 56px; }
+  .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+  h2 { font-size: 28px; margin: 0 0 22px; letter-spacing: -.015em; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px;
+          display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .step .num { width: 40px; height: 40px; border-radius: 50%; background: #7c3aed; color: #fff; font-size: 20px; font-weight: 800;
+               display: grid; place-items: center; box-shadow: 0 4px 12px rgba(124,58,237,.4); }
+  .step h3 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .step p { margin: 0; color: var(--mute); font-size: 14px; }
+  .step .act { margin-top: auto; padding-top: 4px; }
+  .pic { background: var(--field); border-radius: 12px; height: 84px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; overflow: hidden; }
+  .bar { width: 100%; background: var(--card); border-radius: 8px; padding: 7px 9px; display: flex; gap: 7px; align-items: center; font-size: 12px; color: var(--faint); }
+  .bar i { width: 34px; height: 8px; border-radius: 4px; background: var(--field); }
+  .bar b { padding: 3px 9px; border-radius: 6px; background: #7c3aed; color: #fff; font-size: 11.5px; white-space: nowrap; }
+  .url { width: 100%; background: var(--card); border-radius: 8px; padding: 8px 10px; font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini { display: grid; grid-template-columns: repeat(5, 20px); gap: 3px; }
+  .mini i { height: 20px; border-radius: 4px; background: var(--card); position: relative; }
+  .mini i.u::before, .mini i.t::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #3b82f6; }
+  .mini i.t::before { background: #b91c1c; }
+  .mini i.n { background: #a855f7; box-shadow: 0 0 8px 2px rgba(168,85,247,.7); }
+  a.bm { display: inline-block; padding: 11px 18px; border-radius: 12px; font-weight: 700; font-size: 16px;
+         text-decoration: none; color: #fff; background: #7c3aed; cursor: grab;
+         box-shadow: 0 4px 14px rgba(124,58,237,.45); }
+  a.btn { display: inline-block; padding: 10px 16px; border-radius: 12px; font-weight: 700; text-decoration: none; color: #fff; background: var(--accent); }
+  .tiny { color: var(--faint); font-size: 12.5px; margin-top: 8px; }
+  #bmTip { color: #7c3aed; font-weight: 600; }
+
+  .key { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+  .key div { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 14px; color: var(--mute); }
+  .key b { color: var(--ink); display: block; }
+  .sw { width: 34px; height: 34px; border-radius: 8px; flex: none; background: #4a3f63; }
+  .sw.next { background: #7e22ce; box-shadow: 0 0 0 2px #fff, 0 0 12px 3px rgba(168,85,247,.8); animation: pulse .9s ease-in-out infinite alternate; }
+  .sw.go { width: auto; height: auto; padding: 6px 9px; font-size: 12px; font-weight: 700; color: #1d1d1f; background: #e5e5ea; border-radius: 6px;
+           box-shadow: 0 0 0 2px #fff, 0 0 12px 4px rgba(34,197,94,.85); white-space: nowrap; }
+  .sw.wrong { background: transparent; outline: 3px dashed var(--bad); outline-offset: -3px; }
+  .note { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-left: 4px solid #7c3aed; border-radius: 12px; padding: 12px 16px; font-size: 14px; color: var(--mute); }
+  .note b { color: var(--ink); }
+
+  @media (max-width: 860px) {
+    .hero .wrap { grid-template-columns: 1fr; }
+    .steps, .key { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) { .hero h1 { font-size: 34px; } .sq.next::after { font-size: 10px; padding: 2px 6px; } }
+  @media (prefers-reduced-motion: reduce) { .sq.next, .sq.next::after, .sw.next, .sq.st::before { animation: none; } }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Cellblock<br>Solver</h1>
+      <p class="sub">The square to play next in Neopets Cellblock, lit up right on the game board, with the reason in plain words.</p>
+      <div class="chips"><span>Opening trap built in</span><span>Never clicks for you</span><span>Nothing sent anywhere</span></div>
+      <a class="gh" href="https://github.com/fang89/Neopets-cellblock-solver" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Source &amp; notes on GitHub <span class="go">↗</span></a>
+    </div>
+    <div class="demo" aria-label="Example: a whole game, every move picked by the helper">
+      <div class="board" id="board"></div>
+      <div class="why" id="why"><span class="tag">…</span><span>Loading</span></div>
+      <div class="demo-foot"><span class="lg"><span><i style="background:#3b82f6"></i>You</span><span><i style="background:#b91c1c"></i>Prisoner</span></span><button id="replay" type="button">Replay</button></div>
+    </div>
+  </div>
+</header>
+
+<section class="setup">
+  <div class="wrap">
+    <p class="eyebrow">Get started · about a minute</p>
+    <h2>Three steps, done once</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Add the bookmark</h3>
+        <div class="pic"><div class="bar"><i></i><i></i><b>Cellblock Helper</b><i></i></div></div>
+        <p>Drag the purple button up to your bookmarks bar (favorites bar in Edge).</p>
+        <div class="act">
+          <a class="bm" id="bm" href="#" draggable="true">Cellblock Helper</a>
+          <div class="tiny">No bar? Press <kbd class="k-bar">Ctrl+Shift+B</kbd>.</div>
+          <div class="tiny" id="bmTip"></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Open the game</h3>
+        <div class="pic"><div class="url">neopets.com/games/cellblock</div></div>
+        <p>Go to Cellblock on Neopets and continue or start a game.</p>
+        <div class="act"><a class="btn" href="https://www.neopets.com/games/cellblock/cellblock.phtml" target="_blank" rel="noopener">Open the game ↗</a></div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Click the bookmark</h3>
+        <div class="pic"><div class="mini"><i></i><i></i><i></i><i class="n"></i><i></i><i></i><i class="u"></i><i class="t"></i><i></i><i></i><i></i><i class="t"></i><i class="u"></i><i></i><i></i></div></div>
+        <p>Once, on the game page. The square to play glows purple with a label. Click it, then press Make Move. It keeps going for every move and every game until you close the tab.</p>
+      </div>
+    </div>
+    <div class="key">
+      <div><i class="sw next"></i><span><b>Purple: play here</b>The card says why.</span></div>
+      <div><i class="sw go">Make Move</i><span><b>Green: press it now</b>You picked the right square.</span></div>
+      <div><i class="sw wrong"></i><span><b>Red dashes</b>You picked a different square. Click the purple one.</span></div>
+    </div>
+    <p class="note"><b>After a win,</b> press <b>Next game of the match</b> on the helper's card. The game's own <b>Play Again</b> button starts the match over from the first game.</p>
+    <p class="tiny">The card in the corner of the game says what the move does. Its × puts the page back to normal. Works in Chrome, Edge and Firefox on Windows and Mac.</p>
+  </div>
+</section>
+
+
+<script type="text/plain" id="bm-src">(() => {
+'use strict';
+if (window.__cbFollow) return window.__cbFollow(); // already following
+const R = {};
+(function (root) {
+'use strict';
+const EMPTY = 0, US = 1, THEM = 2, DEAD = 3;
+const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+const WINDOW_SCORE = [0, 2, 14, 130, 1600, 1000000];
+const DEFENSE_WEIGHT = 0.9;
+const LOOKAHEAD_WIDTH = 10;
+const OPP_REPLY_WEIGHT = 0.55;
+const FOLLOWUP_WEIGHT = 0.25;
+const CANDIDATE_RADIUS = 2;
+const OUR_IMG = 'merridell-small.gif', THEIR_IMG = 'darigan-small.gif', BLANK_IMG = 'blank.gif';
+const GRIDCLICK_RE = /GridClick\(this,(\d+),(\d+)\)/;
+const fname = src => (src || '').split('/').pop().split('?')[0].toLowerCase();
+function findBoard(doc) {
+let best = null, bestKey = [-1, -1];
+for (const table of doc.querySelectorAll('table')) {
+if (table.querySelector('table')) continue;
+const rows = Array.from(table.rows || []);
+if (rows.length < 5) continue;
+let grid = rows.map(row => Array.from(row.cells || []).map(td => {
+const img = td.querySelector('img');
+return { img: img ? (img.getAttribute('src') || '') : '', onclick: td.getAttribute('onclick') || '', td };
+}));
+let score = 0;
+for (const row of grid) for (const c of row)
+if (c.onclick.indexOf('GridClick') !== -1 || c.img.indexOf('/games/cellblock/') !== -1) score++;
+if (score < 20) continue;
+const count = new Map();
+for (const row of grid) if (row.length >= 5) count.set(row.length, (count.get(row.length) || 0) + 1);
+if (!count.size) continue;
+let width = 0, most = 0;
+for (const [w, n] of count) if (n > most) { width = w; most = n; }
+grid = grid.filter(row => row.length === width);
+let clicks = 0, imgs = 0;
+for (const row of grid) for (const c of row) {
+if (c.onclick.indexOf('GridClick') !== -1) clicks++;
+if (c.img.indexOf('cellblock') !== -1) imgs++;
+}
+if (clicks > bestKey[0] || (clicks === bestKey[0] && imgs > bestKey[1])) { best = grid; bestKey = [clicks, imgs]; }
+}
+return best;
+}
+function makeBoard(grid, swap) {
+const us = swap ? THEIR_IMG : OUR_IMG, them = swap ? OUR_IMG : THEIR_IMG;
+const H = grid.length, W = H ? grid[0].length : 0;
+const cells = [], clicks = new Map(), tds = [];
+let stones = 0, mismatch = false;
+const odd = new Set();
+for (let r = 0; r < H; r++) {
+const out = [], trow = [];
+for (let c = 0; c < W; c++) {
+const cell = grid[r][c], name = fname(cell.img), m = GRIDCLICK_RE.exec(cell.onclick);
+trow.push(cell.td || null);
+if (m) {
+out.push(EMPTY);
+const x = +m[1], y = +m[2];
+clicks.set(r * W + c, [x, y]);
+if (y !== r || x !== c) mismatch = true;
+} else if (name === us) { out.push(US); stones++; }
+else if (name === them) { out.push(THEM); stones++; }
+else if (name === '' || name === BLANK_IMG) out.push(EMPTY);
+else { odd.add(name); out.push(DEAD); }
+}
+cells.push(out); tds.push(trow);
+}
+return { H, W, cells, clicks, tds, stones, mismatch, odd };
+}
+const ERROR_TEXT = 'You have been directed to this page from the wrong place!';
+function resultLines(text) {
+const hits = [];
+for (let line of text.split('\n')) {
+line = line.trim();
+if (line && line.length < 140 && /\b(won|win(s|ner)?|lost|lose[sr]?|defeat|beat(en)?|draw|congratulations)\b/i.test(line)) hits.push(line);
+}
+return hits.slice(0, 4);
+}
+function verdict(lines) {
+const t = lines.join(' ').toLowerCase();
+if (/you (have )?(been beaten|been defeated|lost)|you lose/.test(t)) return 'lost';
+if (/you (have )?(won|beaten|defeated)|you win|congratulations/.test(t)) return 'won';
+if (/draw/.test(t)) return 'draw';
+return null;
+}
+function parsePage(doc, swap) {
+const body = doc.body;
+const text = (body && (body.innerText || body.textContent)) || '';
+if (text.indexOf(ERROR_TEXT) !== -1) return { state: 'wrong' };
+const grid = findBoard(doc);
+const info = {};
+const m = /Level:\s*(\d+)(?:(?!Level:)[\s\S]){0,150}?Match\s+(\d+)\s+of\s+(\d+)/.exec(text);
+if (m) { info.level = +m[1]; info.match = +m[2]; info.of = +m[3]; }
+const rec = /Wins:\s*(\d+)[\s\S]{0,200}?Losses:\s*(\d+)/.exec(text);
+if (rec) { info.wins = +rec[1]; info.losses = +rec[2]; }
+if (grid) {
+const board = makeBoard(grid, swap);
+if (board.clicks.size) return { state: 'playing', board, info };
+const lines = resultLines(text);
+return { state: 'over', board, result: verdict(lines), lines, info };
+}
+if (/Your Current Opponent/.test(text) || /Continue your game!/.test(text)) return { state: 'lobby', info };
+return { state: 'none' };
+}
+function cellMetrics(cells, r, c, player) {
+const h = cells.length, w = cells[0].length;
+let total = 0, best = 0;
+for (const [dr, dc] of DIRS) {
+for (let s = -4; s <= 0; s++) {
+let cnt = 1, ok = true;
+for (let k = s; k < s + 5; k++) {
+if (k === 0) continue;
+const rr = r + dr * k, cc = c + dc * k;
+if (rr < 0 || rr >= h || cc < 0 || cc >= w) { ok = false; break; }
+const v = cells[rr][cc];
+if (v === player) cnt++;
+else if (v !== EMPTY) { ok = false; break; }
+}
+if (ok) { total += WINDOW_SCORE[cnt]; if (cnt > best) best = cnt; }
+}
+}
+return [total, best];
+}
+const byRC = (a, b) => a[0] - b[0] || a[1] - b[1];
+function candidateCells(board) {
+const { H, W, clicks } = board;
+const empties = Array.from(clicks.keys()).sort((a, b) => a - b).map(k => [Math.floor(k / W), k % W]);
+if (!board.stones) {
+const ctr = Math.floor(H / 2) * W + Math.floor(W / 2);
+if (clicks.has(ctr)) return [[Math.floor(H / 2), Math.floor(W / 2)]];
+return empties.slice(0, 1);
+}
+const near = new Set();
+for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+const v = board.cells[r][c];
+if (v !== US && v !== THEM) continue;
+for (let dr = -CANDIDATE_RADIUS; dr <= CANDIDATE_RADIUS; dr++)
+for (let dc = -CANDIDATE_RADIUS; dc <= CANDIDATE_RADIUS; dc++) {
+const rr = r + dr, cc = c + dc;
+if (rr >= 0 && rr < H && cc >= 0 && cc < W && clicks.has(rr * W + cc)) near.add(rr * W + cc);
+}
+}
+const out = Array.from(near).sort((a, b) => a - b).map(k => [Math.floor(k / W), k % W]);
+return out.length ? out : empties;
+}
+function nearEmpties(cells, radius) {
+const h = cells.length, w = cells[0].length, near = new Set();
+for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+const v = cells[r][c];
+if (v !== US && v !== THEM) continue;
+for (let dr = -radius; dr <= radius; dr++) for (let dc = -radius; dc <= radius; dc++) {
+const rr = r + dr, cc = c + dc;
+if (rr >= 0 && rr < h && cc >= 0 && cc < w && cells[rr][cc] === EMPTY) near.add(rr * w + cc);
+}
+}
+return Array.from(near).sort((a, b) => a - b).map(k => [Math.floor(k / w), k % w]);
+}
+const fivesFor = (cells, empties, p) => empties.filter(([r, c]) => cellMetrics(cells, r, c, p)[1] >= 5);
+function open4Moves(cells, empties, p) {
+const out = [];
+for (const [r, c] of empties) {
+cells[r][c] = p;
+if (fivesFor(cells, nearEmpties(cells, 1), p).length >= 2) out.push([r, c]);
+cells[r][c] = EMPTY;
+}
+return out;
+}
+function starterDirections(cells, empties, p) {
+const out = new Set(), h = cells.length, w = cells[0].length;
+for (const [r, c] of empties) {
+cells[r][c] = p;
+if (fivesFor(cells, nearEmpties(cells, 1), p).length >= 2) {
+DIRS.forEach(([dr, dc], di) => {
+for (let s = -4; s <= 0; s++) {
+let cnt = 0, ok = true;
+for (let k = s; k < s + 5; k++) {
+const rr = r + dr * k, cc = c + dc * k;
+if (rr < 0 || rr >= h || cc < 0 || cc >= w) { ok = false; break; }
+const v = cells[rr][cc];
+if (v === p) cnt++; else if (v !== EMPTY) { ok = false; break; }
+}
+if (ok && cnt >= 4) out.add((r * w + c) + ':' + di);
+}
+});
+}
+cells[r][c] = EMPTY;
+}
+return Array.from(out, s => s.split(':').map(Number));
+}
+function fourMoves(cells, empties, p) {
+const out = [];
+for (const [r, c] of empties) {
+cells[r][c] = p;
+if (fivesFor(cells, nearEmpties(cells, 1), p).length) out.push([r, c]);
+cells[r][c] = EMPTY;
+}
+return out;
+}
+function forcedWin(cells, depth) {
+const empties = nearEmpties(cells, 1);
+if (fivesFor(cells, empties, US).length) return true;
+if (depth <= 0) return false;
+if (fivesFor(cells, empties, THEM).length) return false;
+for (const [r, c] of fourMoves(cells, empties, US)) {
+cells[r][c] = US;
+const threats = fivesFor(cells, nearEmpties(cells, 1), US);
+let won = false;
+if (threats.length >= 2) won = true;
+else if (threats.length === 1) {
+const [br, bc] = threats[0];
+cells[br][bc] = THEM;
+won = forcedWin(cells, depth - 2);
+cells[br][bc] = EMPTY;
+}
+cells[r][c] = EMPTY;
+if (won) return true;
+}
+return false;
+}
+function bestReplyScore(cells, empties, p) {
+let best = 0;
+for (const [r, c] of empties) { const s = cellMetrics(cells, r, c, p)[0]; if (s > best) best = s; }
+return best;
+}
+const BOOK_OURS_INIT = [[0, 0], [1, 1]];
+const BOOK_THEIRS_INIT = [[0, 1], [1, 0]];
+const BOOK_MOVES = [[2, 2], [1, 3], [3, 1], [2, 0], [1, -1], [-1, 1], [0, 2]];
+const BOOK_REPLY_SLOTS = [
+[[-1, -1], [3, 3]], [[-1, -1], [3, 3]],
+[[0, 4], [4, 0]], [[0, 4], [4, 0]],
+[[0, -2], [4, 2]],
+[[-2, 2], [2, -2]],
+];
+const TRANSFORMS = [];
+for (const sw of [false, true]) for (const sr of [1, -1]) for (const sc of [1, -1])
+TRANSFORMS.push(sw ? ([r, c]) => [sr * c, sc * r] : ([r, c]) => [sr * r, sc * c]);
+function bookMove(board) {
+const { H, W, cells } = board, ours = new Set(), theirs = new Set();
+for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+if (cells[r][c] === US) ours.add(r * 1000 + c);
+else if (cells[r][c] === THEM) theirs.add(r * 1000 + c);
+}
+const k = ours.size - 2;
+if (k < 0 || k >= BOOK_MOVES.length || theirs.size !== k + 2) return null;
+const key = ([r, c]) => r * 1000 + c;
+for (const tf of TRANSFORMS) for (const a of ours) {
+const ar = Math.floor(a / 1000), ac = a % 1000;
+const abs = rel => { const [dr, dc] = tf(rel); return [ar + dr, ac + dc]; };
+const want = BOOK_OURS_INIT.concat(BOOK_MOVES.slice(0, k)).map(x => key(abs(x)));
+if (want.length !== ours.size || !want.every(x => ours.has(x))) continue;
+const init = BOOK_THEIRS_INIT.map(x => key(abs(x)));
+if (!init.every(x => theirs.has(x))) continue;
+const extra = new Set([...theirs].filter(x => !init.includes(x)));
+let ok = true;
+for (const pair of BOOK_REPLY_SLOTS) {
+const need = BOOK_REPLY_SLOTS.slice(0, k).filter(p => p === pair || (p[0] + '' === pair[0] + '' && p[1] + '' === pair[1] + '')).length;
+const have = pair.map(x => key(abs(x))).filter(x => extra.has(x)).length;
+if (have !== need) { ok = false; break; }
+}
+if (!ok) continue;
+const [pr, pc] = abs(BOOK_MOVES[k]);
+if (pr >= 0 && pr < H && pc >= 0 && pc < W && board.clicks.has(pr * W + pc))
+return { cell: [pr, pc], step: k + 1, of: BOOK_MOVES.length };
+return null;
+}
+return null;
+}
+function chooseMove(board) {
+const cands = candidateCells(board);
+if (!cands.length) return { cell: null, why: 'none' };
+const cells = board.cells;
+let scored = [];
+for (const [r, c] of cands) {
+const [mine, myBest] = cellMetrics(cells, r, c, US);
+const [theirs, theirBest] = cellMetrics(cells, r, c, THEM);
+if (myBest >= 5) return { cell: [r, c], why: 'win' };
+scored.push({ cell: [r, c], mine, theirs, theirBest });
+}
+const util = s => s.mine + DEFENSE_WEIGHT * s.theirs;
+scored.sort((a, b) => util(b) - util(a));
+const argmax = (arr, f) => { let b = null, bv = -Infinity; for (const x of arr) { const v = f(x); if (v > bv) { b = x; bv = v; } } return b; };
+const at = new Map(scored.map(s => [s.cell[0] * board.W + s.cell[1], s]));
+const sOf = cell => at.get(cell[0] * board.W + cell[1]);
+const blocks = scored.filter(s => s.theirBest >= 5);
+if (blocks.length) return { cell: argmax(blocks, util).cell, why: 'block5' };
+const myOpen4 = open4Moves(cells, cands, US);
+if (myOpen4.length) return { cell: argmax(myOpen4, m => (sOf(m) ? sOf(m).mine : 0)), why: 'open4' };
+const top = scored.slice(0, LOOKAHEAD_WIDTH);
+for (const s of top) {
+const [r, c] = s.cell;
+cells[r][c] = US;
+const threats = fivesFor(cells, nearEmpties(cells, 1), US);
+let won = false;
+if (threats.length === 1) {
+const [br, bc] = threats[0];
+cells[br][bc] = THEM;
+won = forcedWin(cells, 6);
+cells[br][bc] = EMPTY;
+}
+cells[r][c] = EMPTY;
+if (won) return { cell: s.cell, why: 'vcf' };
+}
+const oppOpen4 = open4Moves(cells, cands, THEM);
+if (oppOpen4.length) return { cell: argmax(oppOpen4, m => (sOf(m) ? util(sOf(m)) : 0)), why: 'stop4' };
+for (const s of top) {
+const [r, c] = s.cell;
+cells[r][c] = US;
+const rest = nearEmpties(cells, 1);
+const pairs = starterDirections(cells, rest, US);
+let good = new Set(pairs.map(p => p[1])).size >= 2 || new Set(pairs.map(p => p[0])).size > 2;
+if (good) good = !fourMoves(cells, rest, THEM).length;
+if (good) for (const [er, ec] of rest) {
+cells[er][ec] = THEM;
+const rest2 = nearEmpties(cells, 1);
+const alive = fivesFor(cells, rest2, US).length || open4Moves(cells, rest2, US).length;
+cells[er][ec] = EMPTY;
+if (!alive) { good = false; break; }
+}
+cells[r][c] = EMPTY;
+if (good) return { cell: s.cell, why: 'fork' };
+}
+const theirTop = scored.slice().sort((a, b) => b.theirs - a.theirs).slice(0, LOOKAHEAD_WIDTH);
+const forks = [];
+for (const s of theirTop) {
+if (s.theirs < 4 * WINDOW_SCORE[3]) break;
+const [r, c] = s.cell;
+cells[r][c] = THEM;
+const pairs = starterDirections(cells, nearEmpties(cells, 1), THEM);
+cells[r][c] = EMPTY;
+if (new Set(pairs.map(p => p[1])).size >= 2) forks.push(s);
+}
+if (forks.length) return { cell: argmax(forks, util).cell, why: 'stopfork' };
+let best = null, bestU = null;
+for (const s of top) {
+const [r, c] = s.cell;
+cells[r][c] = US;
+const rest = nearEmpties(cells, CANDIDATE_RADIUS);
+const opp = bestReplyScore(cells, rest, THEM), mine = bestReplyScore(cells, rest, US);
+cells[r][c] = EMPTY;
+const u = util(s) - OPP_REPLY_WEIGHT * opp + FOLLOWUP_WEIGHT * mine;
+if (bestU === null || u > bestU) { best = s.cell; bestU = u; }
+}
+return { cell: best, why: 'build' };
+}
+function solve(board) {
+const b = bookMove(board);
+if (b) return { cell: b.cell, why: 'book', step: b.step, of: b.of };
+return chooseMove(board);
+}
+const REASONS = {
+book: 'Opening trap: a known line the prisoner falls for',
+win: 'This makes five in a row: you win',
+block5: 'Block: the prisoner makes five here next turn',
+open4: 'Straight four: you win next turn whatever they do',
+vcf: 'Starts a chain of fours that forces the win',
+stop4: 'Stop the prisoner’s open three before it becomes a straight four',
+fork: 'Double threat: the prisoner can only block one',
+stopfork: 'Take the prisoner’s double-threat square',
+build: 'No threats on the board: grow your strongest line',
+};
+root.Cellblock = { EMPTY, US, THEM, DEAD, parsePage, makeBoard, solve, chooseMove, bookMove, cellMetrics, REASONS, BOOK_MOVES, BOOK_REPLY_SLOTS };
+})(R);
+const CB = R.Cellblock;
+const LOBBY_URL = 'https://www.neopets.com/games/cellblock/cellblock.phtml';
+const MAIN_URL = 'https://www.neopets.com/games/cellblock/cellblock_main.phtml';
+const SIDE = 'cellblockHelperSide';
+let swap = false; // true = the player is the darigan pieces (checked after the first move)
+try { swap = localStorage.getItem(SIDE) === 'darigan'; } catch (e) {}
+let lastPick = null; // [r, c] the player clicked last; must hold our piece after the reload
+const old = document.getElementById('cb-helper');
+if (old) old.remove();
+const host = document.createElement('div');
+host.id = 'cb-helper';
+const shadow = host.attachShadow({ mode: 'open' });
+shadow.innerHTML = `<style>
+:host { all: initial; }
+.card { position: fixed; bottom: 16px; right: 16px; z-index: 2147483647; width: 290px;
+display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
+font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+color: #1d1d1f; background: rgba(255,255,255,.96); border: .5px solid rgba(0,0,0,.12);
+border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.08); }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; }
+.txt { flex: 1; min-width: 0; }
+.t { font-weight: 600; font-size: 14px; }
+.t b { color: #7c3aed; }
+.s { color: #6e6e73; font-size: 12px; margin-top: 2px; }
+.m { color: #6e6e73; font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.o { margin-top: 8px; font: 600 12px/1 inherit; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+background: rgba(118,118,128,.14); color: #007aff; }
+.x { flex: none; border: 0; background: none; font: 18px/1 sans-serif; color: #8e8e93; cursor: pointer; padding: 0 2px; }
+@media (prefers-color-scheme: dark) {
+.card { color: #f5f5f7; background: rgba(36,36,38,.95); border-color: rgba(255,255,255,.12); }
+.s, .m { color: #98989d; } .t b { color: #c4b5fd; } .o { background: rgba(118,118,128,.28); color: #0a84ff; }
+}</style><div class="card"><span class="dot"></span><div class="txt"><div class="t"></div><div class="s"></div><div class="m"></div><button class="o" hidden></button></div><button class="x" title="Stop helping">×</button></div>`;
+(document.body || document.documentElement).append(host);
+const $ = s => shadow.querySelector(s);
+const TONE = { ok: '#34c759', warn: '#ff9500', bad: '#ff3b30', info: '#7c3aed' };
+let action = null;
+function say(tone, title, sub, meta, button) {
+$('.dot').style.background = TONE[tone];
+const t = $('.t'); t.textContent = ''; t.append(...[].concat(title));
+$('.s').textContent = sub || '';
+$('.m').textContent = meta || '';
+$('.o').hidden = !button;
+if (button) { $('.o').textContent = button[0]; action = button[1]; }
+}
+const bold = s => { const b = document.createElement('b'); b.textContent = s; return b; };
+if (!/(^|\.)neopets\.com$/.test(location.hostname))
+return say('warn', 'Not the game page', 'Open Cellblock on neopets.com, then click this bookmark there.');
+const frame = document.createElement('iframe');
+frame.id = 'cb-frame';
+frame.src = /\/games\/cellblock\//.test(location.pathname) ? location.pathname + location.search : LOBBY_URL;
+frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;margin:0;z-index:2147483646;background:#fff';
+document.documentElement.style.overflow = 'hidden';
+$('.x').onclick = () => { location.href = LOBBY_URL; }; // back to the plain page
+$('.o').onclick = () => action && action();
+const doc = () => { try { return frame.contentDocument; } catch (e) { return null; } };
+const nextGame = () => { frame.src = MAIN_URL; };
+let target = null; // {r, c, x, y, td}
+function show() {
+const d = doc();
+if (!d || !d.body) return say('warn', 'Left the game', 'Go back to Cellblock and click this bookmark again.');
+let pz;
+try { pz = CB.parsePage(d, swap); } catch (e) { return say('bad', 'Could not read the board', String(e && e.message || e)); }
+target = null;
+const inf = pz.info || {};
+const meta = [inf.level != null && `Level ${inf.level}`, inf.match != null && `match ${inf.match} of ${inf.of}`,
+inf.wins != null && `record ${inf.wins}–${inf.losses}`].filter(Boolean).join(' · ');
+if (pz.state === 'wrong') return say('warn', 'Neopets says “wrong place”', 'Open Cellblock from the Darigan Citadel, then click this bookmark again.');
+if (pz.state === 'lobby') return say('info', 'Press “Continue your game!” or “Go!”', 'Your next move lights up as soon as the board appears.', meta);
+if (pz.state === 'over') {
+lastPick = null;
+const head = pz.result === 'won' ? 'You won this game!' : pz.result === 'lost' ? 'The prisoner won this one' : 'Game over';
+return say(pz.result === 'won' ? 'ok' : 'bad', head,
+'For the next game of the match, use the button below (or reload cellblock_main). “Play Again” starts the match over.',
+meta, ['Next game of the match →', nextGame]);
+}
+if (pz.state !== 'playing') {
+if (/\/games\/cellblock\//.test(d.location.pathname)) return say('info', 'Waiting for a board', '');
+return say('warn', 'Left the game', 'Go back to Cellblock: the helper starts again by itself there.');
+}
+let b = pz.board;
+if (lastPick && b.cells[lastPick[0]] && b.cells[lastPick[0]][lastPick[1]] === CB.THEM) {
+swap = !swap;
+try { localStorage.setItem(SIDE, swap ? 'darigan' : 'meridell'); } catch (e) {}
+b = CB.parsePage(d, swap).board;
+}
+lastPick = null;
+const res = CB.solve(b);
+if (!res.cell) return say('info', 'No move to suggest', '', meta);
+const [r, c] = res.cell, xy = b.clicks.get(r * b.W + c);
+target = { r, c, x: xy[0], y: xy[1], td: b.tds[r][c] };
+hook(d, b);
+paint(d, res);
+const why = CB.REASONS[res.why] + (res.why === 'book' ? ` (move ${res.step} of ${res.of})` : '');
+say(res.why === 'block5' || res.why === 'stop4' || res.why === 'stopfork' ? 'warn' : 'ok',
+['Next: play the ', bold('lit square'), ', then press Make Move'], why + '.', meta);
+}
+function hook(d, b) {
+if (d.__cbHooked) return;
+d.__cbHooked = true;
+d.addEventListener('click', e => {
+const td = e.target && e.target.closest && e.target.closest('td[onclick*="GridClick"]');
+if (!td) return;
+for (let r = 0; r < b.H; r++) for (let c = 0; c < b.W; c++) if (b.tds[r][c] === td) lastPick = [r, c];
+setTimeout(() => paint(d), 0);
+}, true);
+}
+function paint(d, res) {
+if (!d.getElementById('cb-helper-style')) {
+const style = d.createElement('style');
+style.id = 'cb-helper-style';
+style.textContent = `
+td.cb-next { background: rgba(168,85,247,.35) !important; position: relative; z-index: 2147483000; outline: 4px solid #a855f7 !important; outline-offset: -2px;
+box-shadow: 0 0 0 3px #fff, 0 0 22px 8px rgba(168,85,247,.85) !important; animation: cb-pulse .7s ease-in-out infinite alternate; }
+td.cb-next.cb-picked { outline-color: #22c55e !important; box-shadow: 0 0 0 3px #fff, 0 0 18px 6px rgba(34,197,94,.8) !important; animation: none; }
+td.cb-wrong { outline: 3px dashed #ff3b30 !important; outline-offset: -3px; }
+@keyframes cb-pulse { to { box-shadow: 0 0 0 3px #fff, 0 0 32px 14px rgba(168,85,247,.85); } }
+.cb-go { position: relative; z-index: 2147483000; box-shadow: 0 0 0 3px #fff, 0 0 20px 8px rgba(34,197,94,.9) !important; animation: cb-pulse2 .7s ease-in-out infinite alternate; }
+@keyframes cb-pulse2 { to { box-shadow: 0 0 0 3px #fff, 0 0 30px 14px rgba(34,197,94,.9); } }
+.cb-arrow { position: absolute; z-index: 2147483001; pointer-events: none; transform: translate(-50%, -100%);
+display: flex; flex-direction: column; align-items: center;
+font: 800 16px/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #fff;
+animation: cb-bob .6s ease-in-out infinite alternate; }
+.cb-arrow.below { transform: translate(-50%, 0); flex-direction: column-reverse; }
+.cb-arrow b { background: var(--cb-c); padding: 6px 12px; border-radius: 10px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.cb-arrow i { font-style: normal; font-size: 30px; color: var(--cb-c); text-shadow: 0 2px 6px rgba(0,0,0,.35); margin-top: -4px; }
+.cb-arrow.below i { margin: 0 0 -4px; }
+@keyframes cb-bob { to { margin-top: -8px; } }`;
+(d.head || d.documentElement).append(style);
+}
+d.querySelectorAll('.cb-next, .cb-picked, .cb-wrong, .cb-go').forEach(e => e.classList.remove('cb-next', 'cb-picked', 'cb-wrong', 'cb-go'));
+d.querySelectorAll('.cb-arrow').forEach(e => e.remove());
+if (!target || !target.td) return;
+const btn = makeMoveButton(d), picked = selected(d);
+const onTarget = picked && picked[0] === target.x && picked[1] === target.y;
+target.td.classList.add('cb-next');
+if (onTarget && btn) {
+target.td.classList.add('cb-picked');
+btn.classList.add('cb-go');
+pointAt(d, btn, 'Now press Make Move', '#16a34a');
+} else {
+if (picked) {
+const other = d.querySelector(`td[onclick="GridClick(this,${picked[0]},${picked[1]})"]`);
+if (other) other.classList.add('cb-wrong');
+}
+pointAt(d, target.td, res && res.why === 'win' ? 'Play here: five!' : 'Play here', '#9333ea');
+}
+}
+function selected(d) {
+if (!lastPick) return null;
+const x = d.querySelector('input[name="grid_x"]'), y = d.querySelector('input[name="grid_y"]');
+if (x && y && x.value !== '' && y.value !== '') return [+x.value, +y.value];
+return [lastPick[1], lastPick[0]];
+}
+function makeMoveButton(d) {
+return d.querySelector('input[name="makemove"]') ||
+Array.from(d.querySelectorAll('input[type=button],input[type=submit],button')).find(b => /make\s*move/i.test(b.value || b.textContent)) || null;
+}
+function pointAt(d, el, label, colour) {
+const win = d.defaultView, r = el.getBoundingClientRect(), below = r.top < 70;
+const a = d.createElement('div'), b = d.createElement('b'), i = d.createElement('i');
+a.className = 'cb-arrow' + (below ? ' below' : '');
+a.style.setProperty('--cb-c', colour);
+b.textContent = label; i.textContent = below ? '▲' : '▼';
+a.append(b, i);
+a.style.left = (r.left + win.scrollX + r.width / 2) + 'px';
+a.style.top = (below ? r.bottom + win.scrollY + 8 : r.top + win.scrollY - 8) + 'px';
+d.body.append(a);
+if (r.top < 0 || r.bottom > win.innerHeight) try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+}
+say('info', 'Loading the game…', '');
+frame.addEventListener('load', show);
+document.body.append(frame);
+window.__cbFollow = show;
+})();</script>
+<script>// Cellblock board reader + move picker. Plain JS, no dependencies; runs in
+// the solver page (demo), in the bookmark (on the game page) and under node
+// (tests).
+//
+// Cellblock is five-in-a-row against a ladder of prisoners. The board is an
+// HTML table: a playable square is <td onclick="GridClick(this,x,y)"> (x =
+// column, y = row) with a blank picture; a square that is empty but not a
+// legal move yet (moves must touch a piece) is a blank picture with no
+// onclick; the two sides are merridell-small.gif and darigan-small.gif.
+// A move is: click the square, then press the Make Move button.
+(function (root) {
+  'use strict';
+
+  const EMPTY = 0, US = 1, THEM = 2, DEAD = 3;
+  const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  // Score of a clean 5-window by how many of our stones it would hold.
+  const WINDOW_SCORE = [0, 2, 14, 130, 1600, 1000000];
+  const DEFENSE_WEIGHT = 0.9;
+  const LOOKAHEAD_WIDTH = 10;
+  const OPP_REPLY_WEIGHT = 0.55;
+  const FOLLOWUP_WEIGHT = 0.25;
+  const CANDIDATE_RADIUS = 2;
+
+  const OUR_IMG = 'merridell-small.gif', THEIR_IMG = 'darigan-small.gif', BLANK_IMG = 'blank.gif';
+  const GRIDCLICK_RE = /GridClick\(this,(\d+),(\d+)\)/;
+
+  // ------------------------------------------------------------- reading
+  const fname = src => (src || '').split('/').pop().split('?')[0].toLowerCase();
+
+  // Every innermost table with 5+ rows that looks like a board, as rows of
+  // {img, onclick, td}; the board is the one with the most playable squares.
+  function findBoard(doc) {
+    let best = null, bestKey = [-1, -1];
+    for (const table of doc.querySelectorAll('table')) {
+      if (table.querySelector('table')) continue;
+      const rows = Array.from(table.rows || []);
+      if (rows.length < 5) continue;
+      let grid = rows.map(row => Array.from(row.cells || []).map(td => {
+        const img = td.querySelector('img');
+        return { img: img ? (img.getAttribute('src') || '') : '', onclick: td.getAttribute('onclick') || '', td };
+      }));
+      let score = 0;
+      for (const row of grid) for (const c of row)
+        if (c.onclick.indexOf('GridClick') !== -1 || c.img.indexOf('/games/cellblock/') !== -1) score++;
+      if (score < 20) continue;
+      // keep only rows of the board's usual width (drop decorative rows)
+      const count = new Map();
+      for (const row of grid) if (row.length >= 5) count.set(row.length, (count.get(row.length) || 0) + 1);
+      if (!count.size) continue;
+      let width = 0, most = 0;
+      for (const [w, n] of count) if (n > most) { width = w; most = n; }
+      grid = grid.filter(row => row.length === width);
+      let clicks = 0, imgs = 0;
+      for (const row of grid) for (const c of row) {
+        if (c.onclick.indexOf('GridClick') !== -1) clicks++;
+        if (c.img.indexOf('cellblock') !== -1) imgs++;
+      }
+      if (clicks > bestKey[0] || (clicks === bestKey[0] && imgs > bestKey[1])) { best = grid; bestKey = [clicks, imgs]; }
+    }
+    return best;
+  }
+
+  // The numeric board: cells[r][c] in EMPTY/US/THEM/DEAD, clicks = the legal
+  // squares (key r*W+c -> [x, y]). `swap` = we are the darigan pieces.
+  function makeBoard(grid, swap) {
+    const us = swap ? THEIR_IMG : OUR_IMG, them = swap ? OUR_IMG : THEIR_IMG;
+    const H = grid.length, W = H ? grid[0].length : 0;
+    const cells = [], clicks = new Map(), tds = [];
+    let stones = 0, mismatch = false;
+    const odd = new Set();
+    for (let r = 0; r < H; r++) {
+      const out = [], trow = [];
+      for (let c = 0; c < W; c++) {
+        const cell = grid[r][c], name = fname(cell.img), m = GRIDCLICK_RE.exec(cell.onclick);
+        trow.push(cell.td || null);
+        if (m) {
+          out.push(EMPTY);
+          const x = +m[1], y = +m[2];
+          clicks.set(r * W + c, [x, y]);
+          if (y !== r || x !== c) mismatch = true;
+        } else if (name === us) { out.push(US); stones++; }
+        else if (name === them) { out.push(THEM); stones++; }
+        else if (name === '' || name === BLANK_IMG) out.push(EMPTY);
+        else { odd.add(name); out.push(DEAD); }
+      }
+      cells.push(out); tds.push(trow);
+    }
+    return { H, W, cells, clicks, tds, stones, mismatch, odd };
+  }
+
+  const ERROR_TEXT = 'You have been directed to this page from the wrong place!';
+  function resultLines(text) {
+    const hits = [];
+    for (let line of text.split('\n')) {
+      line = line.trim();
+      if (line && line.length < 140 && /\b(won|win(s|ner)?|lost|lose[sr]?|defeat|beat(en)?|draw|congratulations)\b/i.test(line)) hits.push(line);
+    }
+    return hits.slice(0, 4);
+  }
+  function verdict(lines) {
+    const t = lines.join(' ').toLowerCase();
+    if (/you (have )?(been beaten|been defeated|lost)|you lose/.test(t)) return 'lost';
+    if (/you (have )?(won|beaten|defeated)|you win|congratulations/.test(t)) return 'won';
+    if (/draw/.test(t)) return 'draw';
+    return null;
+  }
+
+  // What the page is: {state: playing|over|lobby|wrong|none, board?, result?, lines?, info?}
+  function parsePage(doc, swap) {
+    const body = doc.body;
+    const text = (body && (body.innerText || body.textContent)) || '';
+    if (text.indexOf(ERROR_TEXT) !== -1) return { state: 'wrong' };
+    const grid = findBoard(doc);
+    const info = {};
+    // The pet sidebar also says "Level:", so the game's Level must sit right before "Match X of Y".
+    const m = /Level:\s*(\d+)(?:(?!Level:)[\s\S]){0,150}?Match\s+(\d+)\s+of\s+(\d+)/.exec(text);
+    if (m) { info.level = +m[1]; info.match = +m[2]; info.of = +m[3]; }
+    const rec = /Wins:\s*(\d+)[\s\S]{0,200}?Losses:\s*(\d+)/.exec(text);
+    if (rec) { info.wins = +rec[1]; info.losses = +rec[2]; }
+    if (grid) {
+      const board = makeBoard(grid, swap);
+      if (board.clicks.size) return { state: 'playing', board, info };
+      const lines = resultLines(text);
+      return { state: 'over', board, result: verdict(lines), lines, info };
+    }
+    if (/Your Current Opponent/.test(text) || /Continue your game!/.test(text)) return { state: 'lobby', info };
+    return { state: 'none' };
+  }
+
+  // ------------------------------------------------------------- solver
+  function cellMetrics(cells, r, c, player) {
+    const h = cells.length, w = cells[0].length;
+    let total = 0, best = 0;
+    for (const [dr, dc] of DIRS) {
+      for (let s = -4; s <= 0; s++) {
+        let cnt = 1, ok = true;
+        for (let k = s; k < s + 5; k++) {
+          if (k === 0) continue;
+          const rr = r + dr * k, cc = c + dc * k;
+          if (rr < 0 || rr >= h || cc < 0 || cc >= w) { ok = false; break; }
+          const v = cells[rr][cc];
+          if (v === player) cnt++;
+          else if (v !== EMPTY) { ok = false; break; }
+        }
+        if (ok) { total += WINDOW_SCORE[cnt]; if (cnt > best) best = cnt; }
+      }
+    }
+    return [total, best];
+  }
+
+  const byRC = (a, b) => a[0] - b[0] || a[1] - b[1];
+
+  function candidateCells(board) {
+    const { H, W, clicks } = board;
+    const empties = Array.from(clicks.keys()).sort((a, b) => a - b).map(k => [Math.floor(k / W), k % W]);
+    if (!board.stones) {
+      const ctr = Math.floor(H / 2) * W + Math.floor(W / 2);
+      if (clicks.has(ctr)) return [[Math.floor(H / 2), Math.floor(W / 2)]];
+      return empties.slice(0, 1);
+    }
+    const near = new Set();
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const v = board.cells[r][c];
+      if (v !== US && v !== THEM) continue;
+      for (let dr = -CANDIDATE_RADIUS; dr <= CANDIDATE_RADIUS; dr++)
+        for (let dc = -CANDIDATE_RADIUS; dc <= CANDIDATE_RADIUS; dc++) {
+          const rr = r + dr, cc = c + dc;
+          if (rr >= 0 && rr < H && cc >= 0 && cc < W && clicks.has(rr * W + cc)) near.add(rr * W + cc);
+        }
+    }
+    const out = Array.from(near).sort((a, b) => a - b).map(k => [Math.floor(k / W), k % W]);
+    return out.length ? out : empties;
+  }
+
+  function nearEmpties(cells, radius) {
+    const h = cells.length, w = cells[0].length, near = new Set();
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+      const v = cells[r][c];
+      if (v !== US && v !== THEM) continue;
+      for (let dr = -radius; dr <= radius; dr++) for (let dc = -radius; dc <= radius; dc++) {
+        const rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < h && cc >= 0 && cc < w && cells[rr][cc] === EMPTY) near.add(rr * w + cc);
+      }
+    }
+    return Array.from(near).sort((a, b) => a - b).map(k => [Math.floor(k / w), k % w]);
+  }
+
+  const fivesFor = (cells, empties, p) => empties.filter(([r, c]) => cellMetrics(cells, r, c, p)[1] >= 5);
+
+  function open4Moves(cells, empties, p) {
+    const out = [];
+    for (const [r, c] of empties) {
+      cells[r][c] = p;
+      if (fivesFor(cells, nearEmpties(cells, 1), p).length >= 2) out.push([r, c]);
+      cells[r][c] = EMPTY;
+    }
+    return out;
+  }
+
+  // (cell, direction) pairs where playing the cell makes a straight-four setup.
+  function starterDirections(cells, empties, p) {
+    const out = new Set(), h = cells.length, w = cells[0].length;
+    for (const [r, c] of empties) {
+      cells[r][c] = p;
+      if (fivesFor(cells, nearEmpties(cells, 1), p).length >= 2) {
+        DIRS.forEach(([dr, dc], di) => {
+          for (let s = -4; s <= 0; s++) {
+            let cnt = 0, ok = true;
+            for (let k = s; k < s + 5; k++) {
+              const rr = r + dr * k, cc = c + dc * k;
+              if (rr < 0 || rr >= h || cc < 0 || cc >= w) { ok = false; break; }
+              const v = cells[rr][cc];
+              if (v === p) cnt++; else if (v !== EMPTY) { ok = false; break; }
+            }
+            if (ok && cnt >= 4) out.add((r * w + c) + ':' + di);
+          }
+        });
+      }
+      cells[r][c] = EMPTY;
+    }
+    return Array.from(out, s => s.split(':').map(Number));
+  }
+
+  function fourMoves(cells, empties, p) {
+    const out = [];
+    for (const [r, c] of empties) {
+      cells[r][c] = p;
+      if (fivesFor(cells, nearEmpties(cells, 1), p).length) out.push([r, c]);
+      cells[r][c] = EMPTY;
+    }
+    return out;
+  }
+
+  // US to move forces a win through a chain of fours.
+  function forcedWin(cells, depth) {
+    const empties = nearEmpties(cells, 1);
+    if (fivesFor(cells, empties, US).length) return true;
+    if (depth <= 0) return false;
+    if (fivesFor(cells, empties, THEM).length) return false;
+    for (const [r, c] of fourMoves(cells, empties, US)) {
+      cells[r][c] = US;
+      const threats = fivesFor(cells, nearEmpties(cells, 1), US);
+      let won = false;
+      if (threats.length >= 2) won = true;
+      else if (threats.length === 1) {
+        const [br, bc] = threats[0];
+        cells[br][bc] = THEM;
+        won = forcedWin(cells, depth - 2);
+        cells[br][bc] = EMPTY;
+      }
+      cells[r][c] = EMPTY;
+      if (won) return true;
+    }
+    return false;
+  }
+
+  function bestReplyScore(cells, empties, p) {
+    let best = 0;
+    for (const [r, c] of empties) { const s = cellMetrics(cells, r, c, p)[0]; if (s > best) best = s; }
+    return best;
+  }
+
+  // ------------------------------------------------------------- opening book
+  // Tournaments 1-10 open with the same four centre stones: ours on one
+  // diagonal of a 2x2 block, the prisoner's on the other. The prisoner
+  // blocks one end of an open three, and when we answer with a quiet move it
+  // wastes its turn on the other end of the already-dead three. This 7-move
+  // line turns those wasted turns into a double open three on move 7.
+  // Coordinates are relative to our (0,0) stone; all 8 symmetries are tried.
+  const BOOK_OURS_INIT = [[0, 0], [1, 1]];
+  const BOOK_THEIRS_INIT = [[0, 1], [1, 0]];
+  const BOOK_MOVES = [[2, 2], [1, 3], [3, 1], [2, 0], [1, -1], [-1, 1], [0, 2]];
+  const BOOK_REPLY_SLOTS = [
+    [[-1, -1], [3, 3]], [[-1, -1], [3, 3]],
+    [[0, 4], [4, 0]], [[0, 4], [4, 0]],
+    [[0, -2], [4, 2]],
+    [[-2, 2], [2, -2]],
+  ];
+  const TRANSFORMS = [];
+  for (const sw of [false, true]) for (const sr of [1, -1]) for (const sc of [1, -1])
+    TRANSFORMS.push(sw ? ([r, c]) => [sr * c, sc * r] : ([r, c]) => [sr * r, sc * c]);
+
+  function bookMove(board) {
+    const { H, W, cells } = board, ours = new Set(), theirs = new Set();
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      if (cells[r][c] === US) ours.add(r * 1000 + c);
+      else if (cells[r][c] === THEM) theirs.add(r * 1000 + c);
+    }
+    const k = ours.size - 2;
+    if (k < 0 || k >= BOOK_MOVES.length || theirs.size !== k + 2) return null;
+    const key = ([r, c]) => r * 1000 + c;
+    for (const tf of TRANSFORMS) for (const a of ours) {
+      const ar = Math.floor(a / 1000), ac = a % 1000;
+      const abs = rel => { const [dr, dc] = tf(rel); return [ar + dr, ac + dc]; };
+      const want = BOOK_OURS_INIT.concat(BOOK_MOVES.slice(0, k)).map(x => key(abs(x)));
+      if (want.length !== ours.size || !want.every(x => ours.has(x))) continue;
+      const init = BOOK_THEIRS_INIT.map(x => key(abs(x)));
+      if (!init.every(x => theirs.has(x))) continue;
+      const extra = new Set([...theirs].filter(x => !init.includes(x)));
+      let ok = true;
+      for (const pair of BOOK_REPLY_SLOTS) {
+        const need = BOOK_REPLY_SLOTS.slice(0, k).filter(p => p === pair || (p[0] + '' === pair[0] + '' && p[1] + '' === pair[1] + '')).length;
+        const have = pair.map(x => key(abs(x))).filter(x => extra.has(x)).length;
+        if (have !== need) { ok = false; break; }
+      }
+      if (!ok) continue;
+      const [pr, pc] = abs(BOOK_MOVES[k]);
+      if (pr >= 0 && pr < H && pc >= 0 && pc < W && board.clicks.has(pr * W + pc))
+        return { cell: [pr, pc], step: k + 1, of: BOOK_MOVES.length };
+      return null;
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------- picking
+  // Strict threat order: win, block five, straight four, chain of fours,
+  // stop their straight-four setup, make a double threat, sit on their fork,
+  // else the best-scoring square with a two-move check.
+  // Returns {cell: [r, c] | null, why: <short code>, ...}.
+  function chooseMove(board) {
+    const cands = candidateCells(board);
+    if (!cands.length) return { cell: null, why: 'none' };
+    const cells = board.cells;
+    let scored = [];
+    for (const [r, c] of cands) {
+      const [mine, myBest] = cellMetrics(cells, r, c, US);
+      const [theirs, theirBest] = cellMetrics(cells, r, c, THEM);
+      if (myBest >= 5) return { cell: [r, c], why: 'win' };
+      scored.push({ cell: [r, c], mine, theirs, theirBest });
+    }
+    const util = s => s.mine + DEFENSE_WEIGHT * s.theirs;
+    scored.sort((a, b) => util(b) - util(a));
+    const argmax = (arr, f) => { let b = null, bv = -Infinity; for (const x of arr) { const v = f(x); if (v > bv) { b = x; bv = v; } } return b; };
+    const at = new Map(scored.map(s => [s.cell[0] * board.W + s.cell[1], s]));
+    const sOf = cell => at.get(cell[0] * board.W + cell[1]);
+
+    const blocks = scored.filter(s => s.theirBest >= 5);
+    if (blocks.length) return { cell: argmax(blocks, util).cell, why: 'block5' };
+
+    const myOpen4 = open4Moves(cells, cands, US);
+    if (myOpen4.length) return { cell: argmax(myOpen4, m => (sOf(m) ? sOf(m).mine : 0)), why: 'open4' };
+
+    const top = scored.slice(0, LOOKAHEAD_WIDTH);
+    for (const s of top) {
+      const [r, c] = s.cell;
+      cells[r][c] = US;
+      const threats = fivesFor(cells, nearEmpties(cells, 1), US);
+      let won = false;
+      if (threats.length === 1) {
+        const [br, bc] = threats[0];
+        cells[br][bc] = THEM;
+        won = forcedWin(cells, 6);
+        cells[br][bc] = EMPTY;
+      }
+      cells[r][c] = EMPTY;
+      if (won) return { cell: s.cell, why: 'vcf' };
+    }
+
+    const oppOpen4 = open4Moves(cells, cands, THEM);
+    if (oppOpen4.length) return { cell: argmax(oppOpen4, m => (sOf(m) ? util(sOf(m)) : 0)), why: 'stop4' };
+
+    for (const s of top) {
+      const [r, c] = s.cell;
+      cells[r][c] = US;
+      const rest = nearEmpties(cells, 1);
+      const pairs = starterDirections(cells, rest, US);
+      let good = new Set(pairs.map(p => p[1])).size >= 2 || new Set(pairs.map(p => p[0])).size > 2;
+      if (good) good = !fourMoves(cells, rest, THEM).length;
+      if (good) for (const [er, ec] of rest) {
+        cells[er][ec] = THEM;
+        const rest2 = nearEmpties(cells, 1);
+        const alive = fivesFor(cells, rest2, US).length || open4Moves(cells, rest2, US).length;
+        cells[er][ec] = EMPTY;
+        if (!alive) { good = false; break; }
+      }
+      cells[r][c] = EMPTY;
+      if (good) return { cell: s.cell, why: 'fork' };
+    }
+
+    const theirTop = scored.slice().sort((a, b) => b.theirs - a.theirs).slice(0, LOOKAHEAD_WIDTH);
+    const forks = [];
+    for (const s of theirTop) {
+      if (s.theirs < 4 * WINDOW_SCORE[3]) break;
+      const [r, c] = s.cell;
+      cells[r][c] = THEM;
+      const pairs = starterDirections(cells, nearEmpties(cells, 1), THEM);
+      cells[r][c] = EMPTY;
+      if (new Set(pairs.map(p => p[1])).size >= 2) forks.push(s);
+    }
+    if (forks.length) return { cell: argmax(forks, util).cell, why: 'stopfork' };
+
+    let best = null, bestU = null;
+    for (const s of top) {
+      const [r, c] = s.cell;
+      cells[r][c] = US;
+      const rest = nearEmpties(cells, CANDIDATE_RADIUS);
+      const opp = bestReplyScore(cells, rest, THEM), mine = bestReplyScore(cells, rest, US);
+      cells[r][c] = EMPTY;
+      const u = util(s) - OPP_REPLY_WEIGHT * opp + FOLLOWUP_WEIGHT * mine;
+      if (bestU === null || u > bestU) { best = s.cell; bestU = u; }
+    }
+    return { cell: best, why: 'build' };
+  }
+
+  // Book first, then the threat logic.
+  function solve(board) {
+    const b = bookMove(board);
+    if (b) return { cell: b.cell, why: 'book', step: b.step, of: b.of };
+    return chooseMove(board);
+  }
+
+  const REASONS = {
+    book: 'Opening trap: a known line the prisoner falls for',
+    win: 'This makes five in a row: you win',
+    block5: 'Block: the prisoner makes five here next turn',
+    open4: 'Straight four: you win next turn whatever they do',
+    vcf: 'Starts a chain of fours that forces the win',
+    stop4: 'Stop the prisoner’s open three before it becomes a straight four',
+    fork: 'Double threat: the prisoner can only block one',
+    stopfork: 'Take the prisoner’s double-threat square',
+    build: 'No threats on the board: grow your strongest line',
+  };
+
+  root.Cellblock = { EMPTY, US, THEM, DEAD, parsePage, makeBoard, solve, chooseMove, bookMove, cellMetrics, REASONS, BOOK_MOVES, BOOK_REPLY_SLOTS };
+})(globalThis);
+
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  if (mac) document.querySelectorAll('.k-bar').forEach(k => { k.textContent = '⌘+Shift+B'; });
+
+  // ------------------------------------------------------------ bookmark
+  const bm = $('bm');
+  bm.href = 'javascript:' + encodeURIComponent($('bm-src').textContent);
+  bm.addEventListener('click', e => {
+    e.preventDefault();
+    $('bmTip').textContent = 'Don’t click it here: drag it to your bookmarks bar, then click it on the game page.';
+  });
+
+  // ------------------------------------------------------------ demo game
+  // A whole game, replayed: every one of "your" moves is picked as the page
+  // runs, by the same code the bookmark carries. The prisoner answers the
+  // way the real one does in the opening (it blocks the open threes), then
+  // plays the helper's own best defence. It is a picture, not a game.
+  const CB = globalThis.Cellblock, S = 10, A = 4;
+  const board = $('board'), sqs = [];
+  for (let i = 0; i < S * S; i++) { const d = document.createElement('div'); d.className = 'sq'; board.appendChild(d); sqs.push(d); }
+  const TAG = { book: ['Trap', 'book'], win: ['Five!', 'win'], block5: ['Block', 'def'], stop4: ['Block', 'def'], stopfork: ['Block', 'def'],
+    open4: ['Attack', ''], vcf: ['Attack', ''], fork: ['Attack', ''], build: ['Build', ''] };
+  const toGrid = cells => cells.map((row, r) => row.map((v, c) => {
+    const touch = !v && [-1, 0, 1].some(a => [-1, 0, 1].some(b => (cells[r + a] || [])[c + b]));
+    return { img: v === 1 ? 'merridell-small.gif' : v === 2 ? 'darigan-small.gif' : 'blank.gif', onclick: touch ? `GridClick(this,${c},${r})` : '' };
+  }));
+  const fiveThrough = (cells, r, c) => {
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const line = [[r, c]];
+      for (const s of [1, -1]) for (let k = 1; cells[r + s * dr * k] && cells[r + s * dr * k][c + s * dc * k] === cells[r][c]; k++) line.push([r + s * dr * k, c + s * dc * k]);
+      if (line.length >= 5) return line;
+    }
+    return null;
+  };
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let timer = null, run = 0;
+  const wait = (ms, id) => new Promise(res => { timer = setTimeout(() => res(id === run), reduced ? ms / 3 : ms); });
+
+  function draw(cells, next) {
+    cells.forEach((row, r) => row.forEach((v, c) => {
+      const d = sqs[r * S + c];
+      d.className = 'sq' + (v ? ' st ' + (v === 1 ? 'us' : 'them') : '');
+      if (next && next[0] === r && next[1] === c) d.className += ' next' + (r < 2 ? ' low' : '');
+    }));
+  }
+  function why(res) {
+    const [t, k] = TAG[res.why] || ['', ''];
+    const w = $('why'); w.textContent = '';
+    const tag = document.createElement('span'); tag.className = 'tag ' + k; tag.textContent = t;
+    const txt = document.createElement('span'); txt.textContent = CB.REASONS[res.why] + (res.why === 'book' ? ` (move ${res.step} of ${res.of})` : '');
+    w.append(tag, txt);
+  }
+
+  async function play() {
+    const id = ++run;
+    clearTimeout(timer);
+    const cells = Array.from({ length: S }, () => Array(S).fill(0));
+    cells[A][A] = cells[A + 1][A + 1] = 1; cells[A][A + 1] = cells[A + 1][A] = 2;
+    const used = new Map();
+    draw(cells);
+    for (let move = 0; move < 30; move++) {
+      const res = CB.solve(CB.makeBoard(toGrid(cells), false));
+      if (!res.cell) break;
+      draw(cells, res.cell); why(res);
+      if (!await wait(1700, id)) return;
+      const [r, c] = res.cell;
+      cells[r][c] = 1; draw(cells);
+      const line = fiveThrough(cells, r, c);
+      if (line) {
+        line.forEach(([a, b]) => sqs[a * S + b].classList.add('five'));
+        const w = $('why'); w.lastChild.textContent = `Five in a row in ${move + 1} moves. The prisoner never had a chance.`;
+        if (!await wait(4500, id)) return;
+        return play();
+      }
+      if (!await wait(650, id)) return;
+      // the prisoner: blocks the book's open threes, then defends like the helper would
+      let reply = null;
+      if (res.why === 'book' && res.step <= CB.BOOK_REPLY_SLOTS.length) {
+        const pair = CB.BOOK_REPLY_SLOTS[res.step - 1], key = pair + '';
+        const pick = used.has(key) ? 1 - used.get(key) : 0;
+        used.set(key, pick);
+        reply = [A + pair[pick][0], A + pair[pick][1]];
+      }
+      if (!reply || cells[reply[0]][reply[1]]) reply = CB.solve(CB.makeBoard(toGrid(cells), true)).cell;
+      if (!reply) break;
+      cells[reply[0]][reply[1]] = 2; draw(cells);
+      if (!await wait(500, id)) return;
+    }
+  }
+  $('replay').addEventListener('click', play);
+  play();
+})();
+</script>
+</body>
+</html>
